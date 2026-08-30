@@ -7,6 +7,7 @@
 ## Highlights
 
 - **⚡ Ultra-Low Memory Footprint**: Uses ~25MB - 35MB RAM compared to 300MB - 600MB+ for Electron-based editors.
+- **🌐 Headless CLI Browser Preview**: View-only mode served on a custom port (`gomd --serve <file.md> --port 8080`) directly in your browser without launching the desktop GUI.
 - **🗂️ Multi-File & Multi-Tab Support**: Open, edit, and switch between multiple documents seamlessly with dirty state tracking per tab.
 - **🎨 Full Code Syntax Highlighting**: Powered by Chroma in Go backend with 100+ languages (Go, Python, JS, TypeScript, Rust, C++, HTML, JSON, Bash, SQL, YAML, etc.) adapting to dark/light/nord/solarized themes.
 - **🚀 Native Go Markdown Processing**: Powered by `goldmark` with GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks, footnotes, typographer).
@@ -18,11 +19,49 @@
 - **💾 Robust File I/O**: Atomic writes, unsaved changes tracking, recent files history, and native multi-file dialogs.
 - **🎨 Beautiful Modern Themes**: Dark, Light, OLED Black, Nord, and Solarized.
 - **📤 Standalone HTML Export** (`Ctrl+Shift+H`): Export beautifully styled, self-contained HTML documents (with print styling for PDF).
-- **🖥️ CLI Integration**: Launch with `gomd notes.md` or multiple files `gomd doc1.md doc2.md`.
+- **🖥️ CLI Integration**: Launch desktop editor with `gomd notes.md` or headless browser preview with `gomd --serve notes.md -p 8080`.
 
 ---
 
-## Keyboard Shortcuts
+## CLI Usage (Browser Preview & Desktop Modes)
+
+### 1. Headless Browser Preview Mode (View-Only in Web Browser)
+Open any markdown file in a live-reloading browser preview without launching the desktop app:
+
+```bash
+# Preview on default port (8080) and auto-open browser
+gomd --serve README.md --open
+
+# Preview on a specific custom port (e.g. 3000)
+gomd --serve document.md --port 3000
+# or short flags:
+gomd -s document.md -p 3000 -o
+```
+
+**Features in Browser Preview:**
+- **Live Sync**: Uses Server-Sent Events (SSE) to automatically update the browser preview when the file is modified on disk (e.g. edited in Vim/VSCode/etc.).
+- **Interactive Theme Switcher**: Dark, Light, OLED, Nord, and Solarized.
+- **Full Code Syntax Highlighting**: Chroma syntax styling embedded.
+- **Print / Save as PDF**: Print-optimized stylesheet included.
+- **Ultra-lightweight**: Consumes under ~5MB of RAM.
+
+---
+
+### 2. Desktop GUI Editor Mode
+```bash
+# Launch editor
+gomd
+
+# Open a specific file
+gomd notes.md
+
+# Open multiple files into tabs
+gomd chapter1.md chapter2.md chapter3.md
+```
+
+---
+
+## Desktop Keyboard Shortcuts
 
 | Shortcut | Action |
 | :--- | :--- |
@@ -49,19 +88,6 @@
 
 ---
 
-## Architecture & Design
-
-- **Go Backend (`main.go`, `app.go`, `services/`)**:
-  - [`services.MarkdownService`](file:///home/neel/Projects/gomd/services/markdown_service.go): GFM parser, Chroma syntax highlighter with theme-matched color styling, HTML sanitizer (`bluemonday`), and text metrics calculator.
-  - [`services.FileService`](file:///home/neel/Projects/gomd/services/file_service.go): Atomic file writes via temporary files, native multi-file dialogs, and recent files persistence in `~/.config/gomd/`.
-- **Frontend (`frontend/src/`)**:
-  - Pure Vanilla TypeScript with Vite (Zero runtime framework overhead, JS bundle < 28KB).
-  - Multi-tab manager ([`frontend/src/tabs.ts`](file:///home/neel/Projects/gomd/frontend/src/tabs.ts)) with in-memory buffer tracking and instant switching.
-  - Enhanced lightweight `<textarea>` engine ([`frontend/src/editor.ts`](file:///home/neel/Projects/gomd/frontend/src/editor.ts)) with auto-indentation, bracket pairing, and list continuation.
-  - Synchronized scrolling and interactive task list checkmarks ([`frontend/src/preview.ts`](file:///home/neel/Projects/gomd/frontend/src/preview.ts)).
-
----
-
 ## Building and Running
 
 ### Prerequisites
@@ -78,7 +104,7 @@ The compiled standalone binary will be generated at `./build/bin/gomd`.
 
 ### Run Development Mode (with Hot Reload)
 ```bash
-/home/neel/go/bin/wails dev -tags webkit2_41
+wails dev -tags webkit2_41
 ```
 
 ### Run Tests

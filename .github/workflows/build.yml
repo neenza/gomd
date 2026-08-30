@@ -1,0 +1,113 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux AMD64
+          - os: ubuntu-latest
+            platform: linux/amd64
+            tags: webkit2_41
+            archive_name: gomd-linux-amd64.tar.gz
+            build_cmd: |
+              sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+              wails build -tags webkit2_41 -platform linux/amd64
+              tar -czvf gomd-linux-amd64.tar.gz -C build/bin gomd
+
+          # Linux ARM64 (Native GitHub ARM Runner)
+          - os: ubuntu-24.04-arm
+            platform: linux/arm64
+            tags: webkit2_41
+            archive_name: gomd-linux-arm64.tar.gz
+            build_cmd: |
+              sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+              wails build -tags webkit2_41 -platform linux/arm64
+              tar -czvf gomd-linux-arm64.tar.gz -C build/bin gomd
+
+          # macOS Universal (Intel + Apple Silicon)
+          - os: macos-latest
+            platform: darwin/universal
+            tags: ""
+            archive_name: gomd-macos-universal.zip
+            build_cmd: |
+              wails build -platform darwin/universal
+              cd build/bin && zip -r ../../gomd-macos-universal.zip gomd.app
+
+          # Windows AMD64
+          - os: windows-latest
+            platform: windows/amd64
+            tags: ""
+            archive_name: gomd-windows-amd64.zip
+            build_cmd: |
+              wails build -platform windows/amd64
+              powershell -Command "Compress-Archive -Path build/bin/gomd.exe -DestinationPath gomd-windows-amd64.zip"
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        shell: bash
+
+      - name: Build Application Package
+        run: ${{ matrix.build_cmd }}
+        shell: bash
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.archive_name }}
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
