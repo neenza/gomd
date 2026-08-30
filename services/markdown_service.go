@@ -45,7 +45,8 @@ func NewMarkdownService() *MarkdownService {
 	policy.AllowAttrs("type", "checked", "disabled").OnElements("input")
 	policy.AllowAttrs("id").Matching(idRegex).Globally()
 	policy.AllowAttrs("aria-hidden").OnElements("a")
-	policy.AllowAttrs("style").OnElements("span", "pre", "code")
+	policy.AllowAttrs("style").Matching(regexp.MustCompile(`.*`)).OnElements("span", "pre", "code")
+	policy.AllowStyles("color", "background-color", "font-weight", "font-style", "text-decoration").Globally()
 
 	return &MarkdownService{
 		sanitizer: policy,
@@ -57,10 +58,12 @@ func (s *MarkdownService) createGoldmarkEngine(theme string) goldmark.Markdown {
 	chromaTheme := "github-dark"
 	if theme == "light" || theme == "solarized-light" {
 		chromaTheme = "github"
-	} else if theme == "monochrome" {
-		chromaTheme = "monokailight"
+	} else if theme == "monochrome" || theme == "oled" {
+		chromaTheme = "monokai"
 	} else if theme == "nord" {
 		chromaTheme = "nord"
+	} else if theme == "solarized" {
+		chromaTheme = "solarized-dark"
 	}
 
 	return goldmark.New(
@@ -72,7 +75,7 @@ func (s *MarkdownService) createGoldmarkEngine(theme string) goldmark.Markdown {
 			highlighting.NewHighlighting(
 				highlighting.WithStyle(chromaTheme),
 				highlighting.WithFormatOptions(
-					chromahtml.WithClasses(true),
+					chromahtml.WithClasses(false),
 					chromahtml.TabWidth(4),
 				),
 			),

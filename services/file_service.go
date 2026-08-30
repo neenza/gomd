@@ -152,7 +152,7 @@ func (fs *FileService) SaveFile(filePath string, content string) (*FileInfo, err
 	}, nil
 }
 
-// OpenFileDialog opens the native file picker for selecting a markdown file
+// OpenFileDialog opens the native file picker for selecting a single markdown file
 func (fs *FileService) OpenFileDialog(ctx context.Context) (*FileInfo, error) {
 	selectedPath, err := runtime.OpenFileDialog(ctx, runtime.OpenDialogOptions{
 		Title: "Open Markdown File",
@@ -170,6 +170,34 @@ func (fs *FileService) OpenFileDialog(ctx context.Context) (*FileInfo, error) {
 	}
 
 	return fs.ReadFile(selectedPath)
+}
+
+// OpenMultipleFilesDialog opens the native file picker for selecting multiple markdown files
+func (fs *FileService) OpenMultipleFilesDialog(ctx context.Context) ([]*FileInfo, error) {
+	selectedPaths, err := runtime.OpenMultipleFilesDialog(ctx, runtime.OpenDialogOptions{
+		Title: "Open Markdown Files",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Markdown Files (*.md, *.markdown, *.mdown)", Pattern: "*.md;*.markdown;*.mdown;*.mkd"},
+			{DisplayName: "Text Files (*.txt)", Pattern: "*.txt"},
+			{DisplayName: "All Files (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(selectedPaths) == 0 {
+		return nil, nil // User cancelled
+	}
+
+	results := make([]*FileInfo, 0, len(selectedPaths))
+	for _, p := range selectedPaths {
+		info, err := fs.ReadFile(p)
+		if err == nil && info != nil {
+			results = append(results, info)
+		}
+	}
+
+	return results, nil
 }
 
 // SaveFileDialog opens the native save dialog to select location and save content

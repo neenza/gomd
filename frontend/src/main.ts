@@ -5,17 +5,18 @@ import { Editor } from './editor';
 import { Preview } from './preview';
 import { SearchController } from './search';
 import { ShortcutManager } from './shortcuts';
+import { TabManager, Tab } from './tabs';
 
 import {
   OpenFile,
   SaveFile,
-  OpenFileDialog,
+  OpenFilesDialog,
   SaveFileDialog,
   ExportHTMLDialog,
   GetStats,
   GetRecentFiles,
   ClearRecentFiles,
-  GetInitialFile,
+  GetInitialFiles,
   SetWindowTitle
 } from '../wailsjs/go/main/App';
 
@@ -27,10 +28,9 @@ class GomdApp {
   private preview: Preview;
   private searchController: SearchController;
   public shortcutManager: ShortcutManager;
+  public tabManager: TabManager;
+
   public currentMode: ViewMode = 'split';
-  private currentFilePath: string = '';
-  private currentFileName: string = 'Untitled.md';
-  private isDirty: boolean = false;
   private isZen: boolean = false;
 
   // DOM Elements
@@ -104,7 +104,16 @@ class GomdApp {
       onScroll: (pct) => this.preview.syncScroll(pct),
     });
 
-    // 4. Initialize Search
+    // 4. Initialize Tabs
+    const tabBarElem = document.getElementById('tab-bar')!;
+    this.tabManager = new TabManager(tabBarElem, {
+      onTabSwitched: (currentTab, prevTab) => this.handleTabSwitched(currentTab, prevTab),
+      onTabClosed: (_closedTab, nextTab) => this.handleTabClosed(nextTab),
+      onNewTabRequested: () => this.newDocument(),
+      onTabDirtyChanged: (tab) => this.handleTabDirtyChanged(tab),
+    });
+
+    // 5. Initialize Search
     const searchBar = document.getElementById('search-bar')!;
     const searchInput = document.getElementById('search-input') as HTMLInputElement;
     const replaceInput = document.getElementById('replace-input') as HTMLInputElement;
@@ -118,7 +127,7 @@ class GomdApp {
       () => this.handleContentChange(textarea.value)
     );
 
-    // 5. Initialize Shortcuts
+    // 6. Initialize Shortcuts
     this.shortcutManager = new ShortcutManager({
       onNew: () => this.newDocument(),
       onOpen: () => this.openFile(),
@@ -136,6 +145,10 @@ class GomdApp {
       onFormatCode: () => this.editor.wrapSelection('```\n', '\n```', 'code here'),
       onFormatLink: () => this.editor.wrapSelection('[', '](https://example.com)', 'link title'),
       onShowShortcuts: () => this.showShortcutsModal(),
+      onCloseTab: () => this.tabManager.closeActiveTab(),
+      onNextTab: () => this.tabManager.nextTab(),
+      onPrevTab: () => this.tabManager.prevTab(),
+      onSelectTabByIndex: (index) => this.tabManager.selectTabByIndex(index),
     });
 
     this.bindUI();
@@ -210,27 +223,25 @@ class GomdApp {
       });
     }
 
-    // Drag & drop file support
+    // Drag & drop file support (supports dropping multiple files at once)
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', async (e) => {
       e.preventDefault();
       if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-        const file = e.dataTransfer.files[0];
-        const filePath = (file as any).path;
-        if (filePath) {
-          await this.loadFilePath(filePath);
-        } else {
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') {
-              this.currentFilePath = '';
-              this.currentFileName = file.name || 'Untitled.md';
-              this.editor.setValue(reader.result);
-              this.markDirty(false);
-              this.updateTitle();
-            }
-          };
-          reader.readAsText(file);
+        for (let i = 0; i < e.dataTransfer.files.length; i++) {
+          const file = e.dataTransfer.files[i];
+          const filePath = (file as any).path;
+          if (filePath) {
+            await this.loadFilePath(filePath);
+          } else {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                this.tabManager.createTab(file.name || 'Untitled.md', reader.result, '');
+              }
+            };
+            reader.readAsText(file);
+          }
         }
       }
     });
@@ -238,17 +249,15 @@ class GomdApp {
 
   private async initStartup(): Promise<void> {
     try {
-      const initial = await GetInitialFile();
-      if (initial && initial.content !== undefined) {
-        this.currentFilePath = initial.path;
-        this.currentFileName = initial.name;
-        this.editor.setValue(initial.content);
-        this.markDirty(false);
-        this.updateTitle();
+      const initialFiles = await GetInitialFiles();
+      if (initialFiles && initialFiles.length > 0) {
+        initialFiles.forEach((fileInfo) => {
+          this.tabManager.createTab(fileInfo.name, fileInfo.content, fileInfo.path);
+        });
         return;
       }
     } catch (err) {
-      console.warn('No initial file found:', err);
+      console.warn('No initial files found:', err);
     }
 
     // Default welcome template
@@ -259,39 +268,88 @@ A lightning-fast, distraction-free minimalist Markdown editor built with **Go** 
 ---
 
 ### Key Features
-- **Ultra-low memory footprint** (~30MB RAM)
-- **Live Markdown preview** with GitHub-flavored syntax
-- **Split**, **Editor only**, and **Preview only** modes
-- **Zen / Distraction-free mode** (\`F11\` or \`Ctrl+Shift+F\`)
-- **Fast shortcuts** for quick formatting
-- **Standalone HTML Export** (\`Ctrl+Shift+H\`)
+- **⚡ Ultra-low memory footprint** (~25-35MB RAM)
+- **🗂️ Multi-File & Multi-Tab Support** (\`Ctrl+T\`, \`Ctrl+W\`, \`Ctrl+Tab\`, \`Alt+1..9\`)
+- **🎨 Code Syntax Highlighting** with theme-matched Chroma colors (Go, Python, JS, Rust, HTML, etc.)
+- **👁️ Live Markdown Preview** with GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks)
+- **📐 Split, Edit Only, and Preview Only** modes (\`Ctrl+\\\`, \`Ctrl+E\`, \`Ctrl+P\`)
+- **🧘 Zen / Distraction-free Mode** (\`F11\` or \`Ctrl+Shift+F\`)
+- **📤 Standalone HTML Export** (\`Ctrl+Shift+H\`)
 
 ### Task List
-- [x] Create document
-- [ ] Write great notes
-- [ ] Export to HTML
+- [x] Multi-file tabbed editing
+- [x] Code syntax highlighting
+- [ ] Write your notes
 
-### Code Syntax Highlighting
+### Code Syntax Highlighting Example
 \`\`\`go
 package main
 
 import "fmt"
 
 func main() {
-    fmt.Println("Hello, minimal Markdown!")
+    message := "Lightning fast and ultra-lean!"
+    fmt.Println(message)
 }
 \`\`\`
 
-> *"Simplicity is the ultimate sophistication."* — Leonardo da Vinci
+> *"Simplicity is prerequisite for reliability."* — Edsger W. Dijkstra
 `;
 
-    this.editor.setValue(sampleMarkdown);
-    this.markDirty(false);
-    this.updateTitle();
+    this.tabManager.createTab('Welcome.md', sampleMarkdown, '');
+  }
+
+  private handleTabSwitched(currentTab: Tab, prevTab?: Tab): void {
+    // Save previous tab state
+    if (prevTab) {
+      const sel = this.editor.getSelectionState();
+      prevTab.content = this.editor.getValue();
+      prevTab.selectionStart = sel.start;
+      prevTab.selectionEnd = sel.end;
+      prevTab.scrollTop = sel.scrollTop;
+    }
+
+    // Load current tab
+    this.editor.setRawValue(currentTab.content);
+    this.editor.setSelectionState(
+      currentTab.selectionStart,
+      currentTab.selectionEnd,
+      currentTab.scrollTop
+    );
+    this.preview.update(currentTab.content, this.themeManager.getTheme(), true);
+    this.updateStats(currentTab.content);
+    this.updateTitle(currentTab);
+    this.editor.focus();
+  }
+
+  private handleTabClosed(nextTab?: Tab): void {
+    if (nextTab) {
+      this.handleTabSwitched(nextTab);
+    }
+  }
+
+  private handleTabDirtyChanged(tab: Tab): void {
+    const activeTab = this.tabManager.getActiveTab();
+    if (activeTab && activeTab.id === tab.id) {
+      this.updateTitle(tab);
+    }
   }
 
   private handleContentChange(content: string): void {
-    this.markDirty(true);
+    const activeTab = this.tabManager.getActiveTab();
+    if (activeTab) {
+      const cursor = this.editor.getCursorPosition();
+      const sel = this.editor.getSelectionState();
+      this.tabManager.updateActiveTabState(
+        content,
+        true,
+        cursor.line,
+        cursor.col,
+        sel.start,
+        sel.end,
+        sel.scrollTop
+      );
+    }
     this.preview.update(content, this.themeManager.getTheme());
     this.updateStats(content);
   }
@@ -308,15 +366,16 @@ func main() {
       this.statChars.textContent = `${stats.characters} ${stats.characters === 1 ? 'char' : 'chars'}`;
       this.statReadTime.textContent = `${stats.readingTime} read`;
     } catch {
-      // Fallback local calc
       const lines = (content.match(/\n/g) || []).length + 1;
       this.statLines.textContent = `${lines} lines`;
     }
   }
 
-  private markDirty(dirty: boolean): void {
-    this.isDirty = dirty;
-    if (dirty) {
+  private updateTitle(tab: Tab): void {
+    this.fileNameLabel.textContent = tab.fileName;
+    this.statPath.textContent = tab.filePath || 'Untitled';
+
+    if (tab.isDirty) {
       this.dirtyDot.classList.add('is-dirty');
       this.statSaveState.textContent = 'Unsaved changes';
       this.statSaveState.style.color = 'var(--warning)';
@@ -325,13 +384,8 @@ func main() {
       this.statSaveState.textContent = 'Saved';
       this.statSaveState.style.color = 'var(--success)';
     }
-    this.updateTitle();
-  }
 
-  private updateTitle(): void {
-    this.fileNameLabel.textContent = this.currentFileName;
-    this.statPath.textContent = this.currentFilePath || 'Untitled';
-    const displayTitle = (this.isDirty ? '● ' : '') + this.currentFileName;
+    const displayTitle = (tab.isDirty ? '● ' : '') + tab.fileName;
     SetWindowTitle(displayTitle);
   }
 
@@ -366,41 +420,64 @@ func main() {
   }
 
   public newDocument(): void {
-    if (this.isDirty && !confirm('You have unsaved changes. Discard and create new file?')) {
-      return;
-    }
-    this.currentFilePath = '';
-    this.currentFileName = 'Untitled.md';
-    this.editor.setValue('');
-    this.markDirty(false);
-    this.updateTitle();
+    this.tabManager.createTab('Untitled.md', '', '');
     this.editor.focus();
   }
 
   public async openFile(): Promise<void> {
     try {
-      const fileInfo = await OpenFileDialog();
-      if (fileInfo && fileInfo.path) {
-        this.currentFilePath = fileInfo.path;
-        this.currentFileName = fileInfo.name;
-        this.editor.setValue(fileInfo.content);
-        this.markDirty(false);
-        this.updateTitle();
+      const files = await OpenFilesDialog();
+      if (files && files.length > 0) {
+        files.forEach((fileInfo) => {
+          const existingTab = this.tabManager.findTabByPath(fileInfo.path);
+          if (existingTab) {
+            this.tabManager.switchTab(existingTab.id);
+          } else {
+            // If current tab is single empty Untitled tab, replace it
+            const activeTab = this.tabManager.getActiveTab();
+            if (
+              activeTab &&
+              !activeTab.filePath &&
+              !activeTab.isDirty &&
+              activeTab.content === '' &&
+              this.tabManager.getTabs().length === 1
+            ) {
+              this.tabManager.updateActiveFileInfo(fileInfo.path, fileInfo.name);
+              this.editor.setValue(fileInfo.content);
+            } else {
+              this.tabManager.createTab(fileInfo.name, fileInfo.content, fileInfo.path);
+            }
+          }
+        });
       }
     } catch (err) {
-      console.error('Failed to open file:', err);
+      console.error('Failed to open files:', err);
     }
   }
 
   public async loadFilePath(path: string): Promise<void> {
     try {
+      const existingTab = this.tabManager.findTabByPath(path);
+      if (existingTab) {
+        this.tabManager.switchTab(existingTab.id);
+        return;
+      }
+
       const fileInfo = await OpenFile(path);
       if (fileInfo && fileInfo.path) {
-        this.currentFilePath = fileInfo.path;
-        this.currentFileName = fileInfo.name;
-        this.editor.setValue(fileInfo.content);
-        this.markDirty(false);
-        this.updateTitle();
+        const activeTab = this.tabManager.getActiveTab();
+        if (
+          activeTab &&
+          !activeTab.filePath &&
+          !activeTab.isDirty &&
+          activeTab.content === '' &&
+          this.tabManager.getTabs().length === 1
+        ) {
+          this.tabManager.updateActiveFileInfo(fileInfo.path, fileInfo.name);
+          this.editor.setValue(fileInfo.content);
+        } else {
+          this.tabManager.createTab(fileInfo.name, fileInfo.content, fileInfo.path);
+        }
       }
     } catch (err) {
       alert(`Could not open file: ${err}`);
@@ -408,14 +485,17 @@ func main() {
   }
 
   public async saveFile(): Promise<void> {
-    if (!this.currentFilePath) {
+    const activeTab = this.tabManager.getActiveTab();
+    if (!activeTab) return;
+
+    if (!activeTab.filePath) {
       return this.saveFileAs();
     }
 
     try {
-      const saved = await SaveFile(this.currentFilePath, this.editor.getValue());
+      const saved = await SaveFile(activeTab.filePath, this.editor.getValue());
       if (saved) {
-        this.markDirty(false);
+        this.tabManager.updateActiveFileInfo(saved.path, saved.name);
         this.statSaveState.textContent = 'Saved';
       }
     } catch (err) {
@@ -424,13 +504,13 @@ func main() {
   }
 
   public async saveFileAs(): Promise<void> {
+    const activeTab = this.tabManager.getActiveTab();
+    if (!activeTab) return;
+
     try {
-      const saved = await SaveFileDialog(this.currentFileName, this.editor.getValue());
+      const saved = await SaveFileDialog(activeTab.fileName, this.editor.getValue());
       if (saved && saved.path) {
-        this.currentFilePath = saved.path;
-        this.currentFileName = saved.name;
-        this.markDirty(false);
-        this.updateTitle();
+        this.tabManager.updateActiveFileInfo(saved.path, saved.name);
       }
     } catch (err) {
       alert(`Error saving file: ${err}`);
@@ -438,8 +518,11 @@ func main() {
   }
 
   public async exportHTML(): Promise<void> {
+    const activeTab = this.tabManager.getActiveTab();
+    if (!activeTab) return;
+
     try {
-      const defaultName = this.currentFileName.replace(/\.md$/, '.html');
+      const defaultName = activeTab.fileName.replace(/\.md$/, '.html');
       const exportedPath = await ExportHTMLDialog(
         defaultName,
         this.editor.getValue(),

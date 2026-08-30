@@ -14,6 +14,10 @@ export function GetInitialFile() {
   return window['go']['main']['App']['GetInitialFile']();
 }
 
+export function GetInitialFiles() {
+  return window['go']['main']['App']['GetInitialFiles']();
+}
+
 export function GetRecentFiles() {
   return window['go']['main']['App']['GetRecentFiles']();
 }
@@ -28,6 +32,10 @@ export function OpenFile(arg1) {
 
 export function OpenFileDialog() {
   return window['go']['main']['App']['OpenFileDialog']();
+}
+
+export function OpenFilesDialog() {
+  return window['go']['main']['App']['OpenFilesDialog']();
 }
 
 export function RenderMarkdown(arg1, arg2) {

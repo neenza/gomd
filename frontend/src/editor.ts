@@ -36,6 +36,27 @@ export class Editor {
     this.callbacks.onChange(content);
   }
 
+  public setRawValue(content: string): void {
+    this.textarea.value = content;
+    this.updateLineNumbers();
+    this.notifyCursorMove();
+  }
+
+  public getSelectionState(): { start: number; end: number; scrollTop: number } {
+    return {
+      start: this.textarea.selectionStart,
+      end: this.textarea.selectionEnd,
+      scrollTop: this.textarea.scrollTop,
+    };
+  }
+
+  public setSelectionState(start: number, end: number, scrollTop: number): void {
+    this.textarea.setSelectionRange(start, end);
+    this.textarea.scrollTop = scrollTop;
+    this.lineNumbers.scrollTop = scrollTop;
+    this.notifyCursorMove();
+  }
+
   public focus(): void {
     this.textarea.focus();
   }

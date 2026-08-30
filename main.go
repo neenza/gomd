@@ -15,17 +15,16 @@ import (
 var assets embed.FS
 
 func main() {
-	// Check for initial file argument from CLI
-	var initialFilePath string
+	// Collect initial file arguments from CLI (e.g. gomd file1.md file2.md)
+	var initialFilePaths []string
 	for _, arg := range os.Args[1:] {
 		if !strings.HasPrefix(arg, "-") && len(arg) > 0 {
-			initialFilePath = arg
-			break
+			initialFilePaths = append(initialFilePaths, arg)
 		}
 	}
 
 	// Create an instance of the app structure
-	app := NewApp(initialFilePath)
+	app := NewApp(initialFilePaths)
 
 	// Create application with options
 	err := wails.Run(&options.App{

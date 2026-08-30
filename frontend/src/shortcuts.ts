@@ -17,6 +17,10 @@ export interface ShortcutHandlers {
   onFormatCode: () => void;
   onFormatLink: () => void;
   onShowShortcuts: () => void;
+  onCloseTab: () => void;
+  onNextTab: () => void;
+  onPrevTab: () => void;
+  onSelectTabByIndex: (index: number) => void;
 }
 
 export class ShortcutManager {
@@ -39,9 +43,50 @@ export class ShortcutManager {
         return;
       }
 
+      // Alt+1 .. Alt+9 for tab switching
+      if (e.altKey && !mod && !e.shiftKey) {
+        const num = parseInt(e.key, 10);
+        if (num >= 1 && num <= 9) {
+          e.preventDefault();
+          this.handlers.onSelectTabByIndex(num - 1);
+          return;
+        }
+      }
+
       // Handle shortcuts with Ctrl/Cmd modifier
       if (mod) {
         const key = e.key.toLowerCase();
+
+        // Ctrl+Tab / Ctrl+Shift+Tab
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            this.handlers.onPrevTab();
+          } else {
+            this.handlers.onNextTab();
+          }
+          return;
+        }
+
+        // Ctrl+PageUp / Ctrl+PageDown
+        if (e.key === 'PageUp') {
+          e.preventDefault();
+          this.handlers.onPrevTab();
+          return;
+        }
+        if (e.key === 'PageDown') {
+          e.preventDefault();
+          this.handlers.onNextTab();
+          return;
+        }
+
+        // Ctrl+1 .. Ctrl+9 for tab switching
+        const num = parseInt(key, 10);
+        if (num >= 1 && num <= 9) {
+          e.preventDefault();
+          this.handlers.onSelectTabByIndex(num - 1);
+          return;
+        }
 
         if (e.shiftKey) {
           switch (key) {
@@ -72,6 +117,14 @@ export class ShortcutManager {
           case 's':
             e.preventDefault();
             this.handlers.onSave();
+            return;
+          case 'w':
+            e.preventDefault();
+            this.handlers.onCloseTab();
+            return;
+          case 't':
+            e.preventDefault();
+            this.handlers.onNew();
             return;
           case 'o':
             e.preventDefault();

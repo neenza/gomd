@@ -12,18 +12,18 @@ import (
 
 // App struct
 type App struct {
-	ctx             context.Context
-	fileService     *services.FileService
-	markdownService *services.MarkdownService
-	initialFilePath string
+	ctx              context.Context
+	fileService      *services.FileService
+	markdownService  *services.MarkdownService
+	initialFilePaths []string
 }
 
 // NewApp creates a new App application struct
-func NewApp(initialFilePath string) *App {
+func NewApp(initialFilePaths []string) *App {
 	return &App{
-		fileService:     services.NewFileService(),
-		markdownService: services.NewMarkdownService(),
-		initialFilePath: initialFilePath,
+		fileService:      services.NewFileService(),
+		markdownService:  services.NewMarkdownService(),
+		initialFilePaths: initialFilePaths,
 	}
 }
 
@@ -43,9 +43,14 @@ func (a *App) SaveFile(filePath string, content string) (*services.FileInfo, err
 	return a.fileService.SaveFile(filePath, content)
 }
 
-// OpenFileDialog opens the OS file picker dialog
+// OpenFileDialog opens the OS file picker dialog for a single file
 func (a *App) OpenFileDialog() (*services.FileInfo, error) {
 	return a.fileService.OpenFileDialog(a.ctx)
+}
+
+// OpenFilesDialog opens the OS file picker dialog for one or more files
+func (a *App) OpenFilesDialog() ([]*services.FileInfo, error) {
+	return a.fileService.OpenMultipleFilesDialog(a.ctx)
 }
 
 // SaveFileDialog opens the OS save file dialog
@@ -82,12 +87,27 @@ func (a *App) ClearRecentFiles() {
 	a.fileService.ClearRecentFiles()
 }
 
-// GetInitialFile returns FileInfo if a file was provided as CLI argument
+// GetInitialFile returns the first file if provided via CLI
 func (a *App) GetInitialFile() (*services.FileInfo, error) {
-	if a.initialFilePath == "" {
+	if len(a.initialFilePaths) == 0 {
 		return nil, nil
 	}
-	return a.fileService.ReadFile(a.initialFilePath)
+	return a.fileService.ReadFile(a.initialFilePaths[0])
+}
+
+// GetInitialFiles returns all files if provided via CLI
+func (a *App) GetInitialFiles() ([]*services.FileInfo, error) {
+	if len(a.initialFilePaths) == 0 {
+		return nil, nil
+	}
+	results := make([]*services.FileInfo, 0, len(a.initialFilePaths))
+	for _, p := range a.initialFilePaths {
+		info, err := a.fileService.ReadFile(p)
+		if err == nil && info != nil {
+			results = append(results, info)
+		}
+	}
+	return results, nil
 }
 
 // SetWindowTitle updates the native window title

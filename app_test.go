@@ -19,7 +19,7 @@ func TestAppIntegration(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	app := NewApp(sampleFile)
+	app := NewApp([]string{sampleFile})
 
 	// Test Initial File
 	initial, err := app.GetInitialFile()

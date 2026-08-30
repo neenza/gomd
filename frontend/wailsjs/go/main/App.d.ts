@@ -8,6 +8,8 @@ export function ExportHTMLDialog(arg1:string,arg2:string,arg3:string):Promise<st
 
 export function GetInitialFile():Promise<services.FileInfo>;
 
+export function GetInitialFiles():Promise<Array<services.FileInfo>>;
+
 export function GetRecentFiles():Promise<Array<string>>;
 
 export function GetStats(arg1:string):Promise<services.TextStats>;
@@ -15,6 +17,8 @@ export function GetStats(arg1:string):Promise<services.TextStats>;
 export function OpenFile(arg1:string):Promise<services.FileInfo>;
 
 export function OpenFileDialog():Promise<services.FileInfo>;
+
+export function OpenFilesDialog():Promise<Array<services.FileInfo>>;
 
 export function RenderMarkdown(arg1:string,arg2:string):Promise<string>;
 
