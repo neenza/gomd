@@ -18,3 +18,13 @@ func TestCodeHighlightOutput(t *testing.T) {
 		t.Errorf("Expected syntax coloring with inline styles, got:\n%s", html)
 	}
 }
+
+func TestMermaidBlockOutput(t *testing.T) {
+	ms := NewMarkdownService()
+	mermaidBlock := "```mermaid\ngraph TD\n    A[Client] --> B[Server]\n```"
+	html, err := ms.Render(mermaidBlock, "dark")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	fmt.Printf("Rendered Mermaid HTML:\n%s\n", html)
+}

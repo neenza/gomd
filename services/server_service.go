@@ -384,6 +384,19 @@ func (s *ServerService) handleIndex(w http.ResponseWriter, r *http.Request) {
   .markdown-body .task-list-item { display: flex; align-items: center; gap: 8px; }
   .markdown-body .task-list-item input[type="checkbox"] { accent-color: var(--accent); }
 
+  .mermaid-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 1.5rem 0;
+    padding: 1.25rem 1rem;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+  .mermaid-container svg { max-width: 100%%; height: auto; }
+
   @keyframes pulse { 0%% { opacity: 1; } 50%% { opacity: 0.4; } 100%% { opacity: 1; } }
 
   @media print {
@@ -418,11 +431,57 @@ func (s *ServerService) handleIndex(w http.ResponseWriter, r *http.Request) {
     </main>
   </div>
 
-  <script>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
     let currentTheme = localStorage.getItem('gomd_web_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', currentTheme);
     const select = document.getElementById('theme-select');
     select.value = currentTheme;
+
+    function getMermaidTheme(theme) {
+      if (theme === 'light') return 'default';
+      if (theme === 'oled') return 'dark';
+      if (theme === 'nord') return 'base';
+      if (theme === 'solarized') return 'neutral';
+      return 'dark';
+    }
+
+    async function renderMermaid() {
+      const nodes = document.querySelectorAll('pre code.language-mermaid, code.language-mermaid');
+      if (nodes.length === 0) return;
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: getMermaidTheme(currentTheme),
+          securityLevel: 'loose',
+          suppressErrorRendering: true,
+        });
+
+        let count = 0;
+        for (const node of nodes) {
+          const pre = node.closest('pre');
+          const code = node.textContent || '';
+          if (!code.trim()) continue;
+          count++;
+          try {
+            const { svg } = await mermaid.render('mermaid-web-' + count + '-' + Date.now(), code);
+            const div = document.createElement('div');
+            div.className = 'mermaid-container';
+            div.innerHTML = svg;
+            if (pre && pre.parentNode) {
+              pre.parentNode.replaceChild(div, pre);
+            } else if (node.parentNode) {
+              node.parentNode.replaceChild(div, node);
+            }
+          } catch (e) {
+            console.debug('Mermaid render error:', e);
+          }
+        }
+      } catch (err) {
+        console.debug('Mermaid init error:', err);
+      }
+    }
 
     select.addEventListener('change', () => {
       currentTheme = select.value;
@@ -437,11 +496,15 @@ func (s *ServerService) handleIndex(w http.ResponseWriter, r *http.Request) {
         if (res.ok) {
           const html = await res.text();
           document.getElementById('content').innerHTML = html;
+          await renderMermaid();
         }
       } catch (err) {
         console.error('Failed to reload content:', err);
       }
     }
+
+    // Initial render
+    renderMermaid();
 
     // Connect to Server-Sent Events for Live-Reload
     const evtSource = new EventSource('/events');

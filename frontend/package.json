@@ -10,5 +10,8 @@
   "devDependencies": {
     "typescript": "^5.6.3",
     "vite": "^7.0.0"
+  },
+  "dependencies": {
+    "mermaid": "^11.17.2"
   }
 }

@@ -1,4 +1,4 @@
-// Markdown Preview Component & Synchronized Scrolling
+// Markdown Preview Component, Synchronized Scrolling & On-Demand Mermaid Diagram Rendering
 
 import { RenderMarkdown } from '../wailsjs/go/main/App';
 
@@ -17,6 +17,7 @@ export class Preview {
   private debounceTimer: number | null = null;
   private isRendering: boolean = false;
   private queuedMarkdown: string | null = null;
+  private diagramCounter: number = 0;
 
   constructor(options: PreviewOptions) {
     this.container = options.container;
@@ -62,7 +63,7 @@ export class Preview {
       } else {
         const html = await RenderMarkdown(this.currentMarkdown, this.currentTheme);
         this.contentElem.innerHTML = html;
-        this.enhanceInteractiveElements();
+        await this.enhanceInteractiveElements();
       }
     } catch (err) {
       console.error('Failed to render markdown:', err);
@@ -76,20 +77,21 @@ export class Preview {
     }
   }
 
-  private enhanceInteractiveElements(): void {
-    // Intercept task-list checkboxes
+  private async enhanceInteractiveElements(): Promise<void> {
+    // 1. Render Mermaid diagrams (lazily loaded on demand)
+    await this.renderMermaidDiagrams();
+
+    // 2. Intercept task-list checkboxes
     const checkboxes = this.contentElem.querySelectorAll('input[type="checkbox"]');
     checkboxes.forEach((cb, index) => {
-      // Enable checkbox for interaction
       (cb as HTMLInputElement).removeAttribute('disabled');
-
       cb.addEventListener('change', (e) => {
         e.preventDefault();
         this.handleCheckboxClick(index);
       });
     });
 
-    // Handle internal link anchor scrolls
+    // 3. Handle internal link anchor scrolls
     const links = this.contentElem.querySelectorAll('a[href^="#"]');
     links.forEach((a) => {
       a.addEventListener('click', (e) => {
@@ -103,6 +105,63 @@ export class Preview {
         }
       });
     });
+  }
+
+  private async renderMermaidDiagrams(): Promise<void> {
+    const mermaidNodes = this.contentElem.querySelectorAll('pre code.language-mermaid, code.language-mermaid');
+    if (mermaidNodes.length === 0) return;
+
+    try {
+      const mermaidModule = await import('mermaid');
+      const mermaid = mermaidModule.default || mermaidModule;
+
+      let mTheme: 'dark' | 'default' | 'neutral' | 'base' = 'dark';
+      if (this.currentTheme === 'light') {
+        mTheme = 'default';
+      } else if (this.currentTheme === 'oled') {
+        mTheme = 'dark';
+      } else if (this.currentTheme === 'nord') {
+        mTheme = 'base';
+      } else if (this.currentTheme === 'solarized') {
+        mTheme = 'neutral';
+      }
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: mTheme,
+        securityLevel: 'loose',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        suppressErrorRendering: true,
+      });
+
+      for (let i = 0; i < mermaidNodes.length; i++) {
+        const codeElem = mermaidNodes[i];
+        const preElem = codeElem.closest('pre');
+        const diagramCode = codeElem.textContent || '';
+        if (!diagramCode.trim()) continue;
+
+        this.diagramCounter++;
+        const id = `mermaid-svg-${Date.now()}-${this.diagramCounter}`;
+
+        try {
+          const { svg } = await mermaid.render(id, diagramCode);
+          const container = document.createElement('div');
+          container.className = 'mermaid-container';
+          container.innerHTML = svg;
+
+          if (preElem && preElem.parentNode) {
+            preElem.parentNode.replaceChild(container, preElem);
+          } else if (codeElem.parentNode) {
+            codeElem.parentNode.replaceChild(container, codeElem);
+          }
+        } catch (err) {
+          // While typing incomplete diagram syntax, keep original code block
+          console.debug('Mermaid rendering in progress:', err);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load mermaid module:', err);
+    }
   }
 
   private handleCheckboxClick(taskIndex: number): void {
