@@ -65,3 +65,39 @@ This is a test paragraph with **bold**, *italic*, and ` + "`inline code`" + `.
 		t.Fatalf("ExportHTMLFile content mismatch: %s", string(htmlData[:200]))
 	}
 }
+
+func TestMarkdownServicePDFWithQuotesAndStrings(t *testing.T) {
+	mdService := NewMarkdownService()
+
+	// Markdown with quotes, dashes, ellipses, and raw strings that previously triggered:
+	// "panic: interface conversion: ast.Node is *ast.String, not *ast.Text"
+	md := `# Quotes & Strings Regression Test
+
+This is a test with "double quotes", 'single quotes', dashes -- like this --- and ellipses...
+
+Quotes in lists:
+- "Option A" - works
+- "Option B" - works
+
+Quotes in table:
+| Key | Value |
+| --- | --- |
+| "name" | "test" |
+| 'foo' | 'bar' |
+
+` + "```bash\necho \"hello from bash\"\n```\n"
+
+	pdfBytes, err := mdService.RenderPDF(md, PDFOptions{
+		Title: "Quotes Test",
+	})
+	if err != nil {
+		t.Fatalf("RenderPDF failed on quotes/strings: %v", err)
+	}
+	if len(pdfBytes) == 0 {
+		t.Fatal("RenderPDF returned 0 bytes")
+	}
+	if !bytes.HasPrefix(pdfBytes, []byte("%PDF-")) {
+		t.Fatalf("Generated invalid PDF header")
+	}
+}
+

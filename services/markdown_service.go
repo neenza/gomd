@@ -18,11 +18,13 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	pdf "github.com/stephenafamo/goldmark-pdf"
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/util"
 )
 
 var (
@@ -286,6 +288,9 @@ func (s *MarkdownService) RenderPDF(source string, opts PDFOptions) ([]byte, err
 		pdf.WithBodyFont(pdf.FontHelvetica),
 		pdf.WithCodeFont(pdf.FontCourier),
 		pdf.WithCodeBlockTheme(styles.Get(chromaTheme)),
+		pdf.WithNodeRenderers(
+			util.Prioritized(&safeTextNodeRenderer{}, 500),
+		),
 	}
 
 	if opts.BaseDir != "" {
@@ -297,7 +302,6 @@ func (s *MarkdownService) RenderPDF(source string, opts PDFOptions) ([]byte, err
 			extension.GFM,
 			extension.Footnote,
 			extension.DefinitionList,
-			extension.Typographer,
 		),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
@@ -314,6 +318,31 @@ func (s *MarkdownService) RenderPDF(source string, opts PDFOptions) ([]byte, err
 	}
 
 	return buf.Bytes(), nil
+}
+
+// safeTextNodeRenderer safely renders both *ast.Text and *ast.String without panicking.
+// goldmark-pdf unconditionally casts both kinds to *ast.Text, which causes a runtime
+// panic when typographer or raw string nodes (*ast.String) are processed.
+type safeTextNodeRenderer struct{}
+
+func (r *safeTextNodeRenderer) RegisterFuncs(reg pdf.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindText, r.renderText)
+	reg.Register(ast.KindString, r.renderText)
+}
+
+func (r *safeTextNodeRenderer) renderText(w *pdf.Writer, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+
+	switch n := node.(type) {
+	case *ast.Text:
+		w.WriteText(string(n.Segment.Value(source)))
+	case *ast.String:
+		w.WriteText(string(n.Value))
+	}
+
+	return ast.WalkContinue, nil
 }
 
 // ExportPDF converts markdown text and writes the resulting PDF to outputPath
