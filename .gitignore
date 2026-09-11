@@ -1,3 +1,6 @@
 build/bin
 node_modules
 frontend/dist
+gomd-convert
+gomd-convert.exe
+*.exe

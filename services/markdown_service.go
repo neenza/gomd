@@ -2,15 +2,21 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html"
 	"math"
+	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
 
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
+	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/microcosm-cc/bluemonday"
+	pdf "github.com/stephenafamo/goldmark-pdf"
 	"github.com/yuin/goldmark"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
@@ -224,4 +230,130 @@ func (s *MarkdownService) ExportHTML(docTitle string, source string, theme strin
 </html>`, html.EscapeString(docTitle), bgColor, textColor, rendered)
 
 	return doc, nil
+}
+
+// PDFOptions configures PDF export settings
+type PDFOptions struct {
+	Title       string
+	Orientation string // "portrait" (default) or "landscape"
+	PageSize    string // "A4" (default), "Letter", "Legal", "A3", "A5"
+	Theme       string // syntax highlighting theme ("github", "github-dark", "monokai", "nord", "solarized-dark")
+	BaseDir     string // base directory for resolving relative image paths
+}
+
+// RenderPDF converts markdown text to PDF document bytes
+func (s *MarkdownService) RenderPDF(source string, opts PDFOptions) ([]byte, error) {
+	if strings.TrimSpace(source) == "" {
+		return nil, fmt.Errorf("source markdown is empty")
+	}
+
+	orientation := opts.Orientation
+	if orientation == "" {
+		orientation = "portrait"
+	}
+
+	pageSize := opts.PageSize
+	if pageSize == "" {
+		pageSize = "A4"
+	}
+
+	chromaTheme := "github"
+	if opts.Theme == "dark" || opts.Theme == "github-dark" {
+		chromaTheme = "github-dark"
+	} else if opts.Theme == "monokai" || opts.Theme == "oled" || opts.Theme == "monochrome" {
+		chromaTheme = "monokai"
+	} else if opts.Theme == "nord" {
+		chromaTheme = "nord"
+	} else if opts.Theme == "solarized" || opts.Theme == "solarized-dark" {
+		chromaTheme = "solarized-dark"
+	}
+
+	title := opts.Title
+	if title == "" {
+		title = "Document"
+	}
+
+	ctx := context.Background()
+	cfg := pdf.FpdfConfig{
+		Title:       title,
+		Orientation: orientation,
+		PaperSize:   pageSize,
+	}
+
+	rendererOpts := []pdf.Option{
+		pdf.WithFpdf(ctx, cfg),
+		pdf.WithHeadingFont(pdf.FontHelvetica),
+		pdf.WithBodyFont(pdf.FontHelvetica),
+		pdf.WithCodeFont(pdf.FontCourier),
+		pdf.WithCodeBlockTheme(styles.Get(chromaTheme)),
+	}
+
+	if opts.BaseDir != "" {
+		rendererOpts = append(rendererOpts, pdf.WithImageFS(http.Dir(opts.BaseDir)))
+	}
+
+	gm := goldmark.New(
+		goldmark.WithExtensions(
+			extension.GFM,
+			extension.Footnote,
+			extension.DefinitionList,
+			extension.Typographer,
+		),
+		goldmark.WithParserOptions(
+			parser.WithAutoHeadingID(),
+			parser.WithAttribute(),
+		),
+		goldmark.WithRenderer(
+			pdf.New(rendererOpts...),
+		),
+	)
+
+	var buf bytes.Buffer
+	if err := gm.Convert([]byte(source), &buf); err != nil {
+		return nil, fmt.Errorf("failed to render PDF: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// ExportPDF converts markdown text and writes the resulting PDF to outputPath
+func (s *MarkdownService) ExportPDF(source string, outputPath string, opts PDFOptions) error {
+	pdfBytes, err := s.RenderPDF(source, opts)
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Dir(outputPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %q: %w", dir, err)
+		}
+	}
+
+	if err := os.WriteFile(outputPath, pdfBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write PDF to %q: %w", outputPath, err)
+	}
+
+	return nil
+}
+
+// ExportHTMLFile converts markdown text and writes standalone HTML with CSS to outputPath
+func (s *MarkdownService) ExportHTMLFile(source string, outputPath string, docTitle string, theme string) error {
+	htmlDoc, err := s.ExportHTML(docTitle, source, theme)
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Dir(outputPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %q: %w", dir, err)
+		}
+	}
+
+	if err := os.WriteFile(outputPath, []byte(htmlDoc), 0644); err != nil {
+		return fmt.Errorf("failed to write HTML to %q: %w", outputPath, err)
+	}
+
+	return nil
 }

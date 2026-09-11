@@ -106,7 +106,54 @@ gomd chapter1.md chapter2.md chapter3.md
 
 ---
 
-## Building and Running
+---
+
+## Standalone Converter CLI (`gomd-convert`)
+
+A dedicated executable for converting Markdown files to **PDF** or **standalone HTML** with **zero external dependencies**:
+- **No WebKit / WebKitGTK / WebView2 required**
+- **No GTK3 / Cocoa / Cgo required (`CGO_ENABLED=0` pure Go)**
+- **No Node.js / npm required to build or run**
+- **Cross-compiles instantly for Windows (`.exe`), Linux, or macOS**
+
+### Build Standalone Converter (Pure Go)
+
+```bash
+# Build for Linux/macOS
+CGO_ENABLED=0 go build -ldflags="-s -w" -o gomd-convert ./cmd/gomd-convert
+
+# Cross-compile for Windows (.exe) on Linux or macOS (no toolchain needed!)
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o gomd-convert.exe ./cmd/gomd-convert
+```
+
+### CLI Converter Usage
+
+```bash
+# Convert Markdown to PDF
+gomd-convert document.md -o document.pdf
+gomd-convert document.md --to pdf
+
+# Convert Markdown to standalone HTML (with embedded CSS & syntax highlighting)
+gomd-convert document.md -o document.html
+gomd-convert document.md --theme light
+
+# Convert via pipe (stdin / stdout)
+cat notes.md | gomd-convert --to pdf > notes.pdf
+cat notes.md | gomd-convert --to html > notes.html
+
+# Batch convert multiple files to PDF
+gomd-convert --to pdf ch1.md ch2.md ch3.md
+
+# Inspect document statistics (lines, words, characters, reading time)
+gomd-convert --stats README.md
+
+# Headless live-sync browser preview without WebKit or desktop GUI
+gomd-convert --serve README.md --port 8080 --open
+```
+
+---
+
+## Building Desktop GUI App
 
 ### Prerequisites
 - Go 1.20+
@@ -114,11 +161,11 @@ gomd chapter1.md chapter2.md chapter3.md
 - GTK3 and WebKitGTK (`webkit2gtk-4.1` on Linux)
 - Wails v2 (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
 
-### Build Production Binary
+### Build Desktop Production Binary
 ```bash
 wails build -tags webkit2_41
 ```
-The compiled standalone binary will be generated at `./build/bin/gomd`.
+The compiled desktop binary will be generated at `./build/bin/gomd`.
 
 ### Run Development Mode (with Hot Reload)
 ```bash
@@ -127,5 +174,5 @@ wails dev -tags webkit2_41
 
 ### Run Tests
 ```bash
-go test ./... -v
+go test ./services -v
 ```
